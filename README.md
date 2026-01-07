@@ -1,6 +1,6 @@
 # Agentic Loop
 
-A Python agentic loop system supporting both **ReAct** and **Plan-and-Execute** modes, with support for multiple LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini).
+A Python agentic loop system supporting both **ReAct** and **Plan-and-Execute** modes, with intelligent memory management and support for multiple LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini).
 
 ## Features
 
@@ -8,11 +8,19 @@ A Python agentic loop system supporting both **ReAct** and **Plan-and-Execute** 
   - **ReAct**: Reasoning-Acting loop, ideal for interactive problem-solving
   - **Plan-and-Execute**: Planning-Execution-Synthesis, perfect for complex multi-step tasks
 
+- 🧠 **Intelligent Memory Management**:
+  - Automatic compression of old messages (30-70% token reduction)
+  - LLM-driven summarization for context optimization
+  - Token tracking and cost estimation
+  - Multiple compression strategies (sliding window, selective, deletion)
+  - Supports long-running tasks without context overflow
+
 - 🤖 **Multiple LLM Support**:
-  - **Anthropic Claude** (Claude 3.5 Sonnet, Opus, etc.)
-  - **OpenAI GPT** (GPT-4o, GPT-4 Turbo, GPT-3.5, etc.)
-  - **Google Gemini** (Gemini 1.5 Pro, Flash, etc.)
-  - Easy to switch between providers with configuration
+  - **Anthropic Claude** (Claude 3.5 Sonnet, Haiku, Opus, etc.)
+  - **OpenAI GPT** (GPT-4o, GPT-4o-mini, O1, O3, etc.)
+  - **Google Gemini** (Gemini 1.5/2.0 Pro, Flash, etc.)
+  - Easy switching between providers via configuration
+  - Custom base URL support (proxies, Azure, local deployments)
 
 - 🛠️ **Rich Toolset**:
   - File operations (read/write/search)
@@ -26,16 +34,16 @@ A Python agentic loop system supporting both **ReAct** and **Plan-and-Execute** 
   - Configurable retry behavior per provider
 
 - 🎓 **Learning-Friendly**:
-  - Clean, concise code (~1500 lines)
-  - Modular design, easy to understand
-  - Comprehensive comments and documentation
+  - Clean, modular architecture
+  - Comprehensive documentation
+  - Easy to extend and customize
 
 ## Quick Start
 
 ### 1. Installation
 
 ```bash
-# Clone the project
+# Clone the repository
 git clone <your-repo>
 cd agentic-loop
 
@@ -70,6 +78,10 @@ ANTHROPIC_API_KEY=your_api_key_here
 # MODEL=claude-3-5-sonnet-20241022
 # MODEL=gpt-4o
 # MODEL=gemini-1.5-pro
+
+# Memory Management (optional, enabled by default)
+MEMORY_ENABLED=true
+MEMORY_COMPRESSION_THRESHOLD=40000
 ```
 
 **Quick setup for different providers:**
@@ -92,12 +104,6 @@ python main.py --mode react --task "Calculate 123 * 456"
 python main.py --mode plan --task "Search for Python agent tutorials and summarize top 3 results"
 ```
 
-#### Enable Shell Tool
-
-```bash
-python main.py --enable-shell --task "List all Python files in current directory"
-```
-
 #### Interactive Input
 
 ```bash
@@ -105,25 +111,29 @@ python main.py --mode react
 # Then enter your task, press Enter twice to submit
 ```
 
-## Usage Examples
+## Memory Management
 
-### Simple Calculation
-
-```bash
-python main.py --task "Calculate the first 10 digits of pi"
-```
-
-### File Operations
+The system includes intelligent memory management that automatically optimizes token usage for long-running tasks:
 
 ```bash
-python main.py --task "Create a file hello.txt with content 'Hello, Agent!'"
+python main.py --task "Complex multi-step task with many iterations..."
+
+# Memory statistics shown at the end:
+# --- Memory Statistics ---
+# Total tokens: 45,234
+# Compressions: 3
+# Net savings: 15,678 tokens (34.7%)
+# Total cost: $0.0234
 ```
 
-### Complex Task
+**Key features:**
+- Automatic compression when context grows large
+- 30-70% token reduction for long conversations
+- Multiple compression strategies
+- Cost tracking across providers
+- Transparent operation (no code changes needed)
 
-```bash
-python main.py --mode plan --task "Search for AI agent information, summarize key concepts, and save to summary.txt"
-```
+See [Memory Management Documentation](docs/memory-management.md) for detailed information.
 
 ## Project Structure
 
@@ -134,21 +144,29 @@ agentic-loop/
 ├── .env.example                 # Environment variables template
 ├── config.py                    # Configuration management
 ├── main.py                      # CLI entry point
-├── test_basic.py                # Basic tests
+├── docs/                        # 📚 Documentation
+│   ├── examples.md              # Detailed usage examples
+│   ├── configuration.md         # Configuration guide
+│   ├── memory-management.md     # Memory system docs
+│   ├── advanced-features.md     # Advanced features & optimization
+│   └── extending.md             # Extension guide
 ├── llm/                         # LLM abstraction layer
-│   ├── __init__.py
 │   ├── base.py                  # BaseLLM abstract class
 │   ├── anthropic_llm.py         # Anthropic Claude adapter
 │   ├── openai_llm.py            # OpenAI GPT adapter
 │   └── gemini_llm.py            # Google Gemini adapter
 ├── agent/                       # Agent implementations
-│   ├── __init__.py
 │   ├── base.py                  # BaseAgent abstract class
 │   ├── react_agent.py           # ReAct mode
 │   ├── plan_execute_agent.py   # Plan-and-Execute mode
 │   └── tool_executor.py         # Tool execution engine
+├── memory/                      # 🧠 Memory management system
+│   ├── types.py                 # Core data structures
+│   ├── manager.py               # Memory orchestrator
+│   ├── short_term.py            # Short-term memory
+│   ├── compressor.py            # LLM-driven compression
+│   └── token_tracker.py         # Token tracking & costs
 ├── tools/                       # Tool implementations
-│   ├── __init__.py
 │   ├── base.py                  # BaseTool abstract class
 │   ├── file_ops.py              # File operation tools
 │   ├── calculator.py            # Code execution/calculator
@@ -159,11 +177,19 @@ agentic-loop/
     └── plan_execute_example.py  # Plan-Execute example
 ```
 
+## Documentation
+
+- **[Examples](docs/examples.md)**: Detailed usage examples and patterns
+- **[Configuration](docs/configuration.md)**: Complete configuration guide
+- **[Memory Management](docs/memory-management.md)**: Memory system documentation
+- **[Advanced Features](docs/advanced-features.md)**: Optimization and advanced techniques
+- **[Extending](docs/extending.md)**: How to add tools, agents, and LLM providers
+
 ## Comparing the Two Modes
 
 ### ReAct Mode
 
-**Use Cases**: Interactive problem-solving, tasks requiring flexible strategy adjustment
+**Best for**: Interactive problem-solving, tasks requiring flexible strategy adjustment
 
 **Workflow**:
 1. Think: Analyze the current situation
@@ -176,14 +202,13 @@ agentic-loop/
 from agent.react_agent import ReActAgent
 from tools.calculator import CalculatorTool
 
-agent = ReActAgent(api_key="your_key", tools=[CalculatorTool()])
+agent = ReActAgent(llm=llm, tools=[CalculatorTool()])
 result = agent.run("Calculate (123 + 456) * 789")
-print(result)
 ```
 
 ### Plan-and-Execute Mode
 
-**Use Cases**: Complex multi-step tasks, problems requiring holistic planning
+**Best for**: Complex multi-step tasks, problems requiring holistic planning
 
 **Workflow**:
 1. Plan: Create a complete step-by-step plan
@@ -196,77 +221,15 @@ from agent.plan_execute_agent import PlanExecuteAgent
 from tools.file_ops import FileReadTool, FileWriteTool
 
 agent = PlanExecuteAgent(
-    api_key="your_key",
+    llm=llm,
     tools=[FileReadTool(), FileWriteTool()]
 )
-result = agent.run("Analyze data.csv file and generate report")
-print(result)
+result = agent.run("Analyze data.csv and generate report")
 ```
-
-## Extending the System
-
-### Adding New Tools
-
-1. Create a new tool class inheriting from `BaseTool`:
-
-```python
-# tools/my_tool.py
-from .base import BaseTool
-from typing import Dict, Any
-
-class MyTool(BaseTool):
-    @property
-    def name(self) -> str:
-        return "my_tool"
-
-    @property
-    def description(self) -> str:
-        return "Describe tool functionality"
-
-    @property
-    def parameters(self) -> Dict[str, Any]:
-        return {
-            "param1": {
-                "type": "string",
-                "description": "Parameter description"
-            }
-        }
-
-    def execute(self, param1: str) -> str:
-        # Implement tool logic
-        return f"Result: {param1}"
-```
-
-2. Register the tool in `main.py`:
-
-```python
-from tools.my_tool import MyTool
-
-tools = [
-    # ... other tools
-    MyTool(),
-]
-```
-
-### Creating New Agent Modes
-
-1. Inherit from `BaseAgent` and implement `run` method:
-
-```python
-# agent/my_agent.py
-from .base import BaseAgent
-
-class MyAgent(BaseAgent):
-    def run(self, task: str) -> str:
-        # Implement custom agent loop
-        pass
-```
-
-2. Add mode option in `main.py`.
 
 ## Configuration Options
 
-All configuration is done via the `.env` file:
+All configuration is done via `.env` file:
 
 ```bash
 # LLM Provider (required)
@@ -278,9 +241,6 @@ OPENAI_API_KEY=your_key_here
 GEMINI_API_KEY=your_key_here
 
 # Model (optional - uses provider defaults if not set)
-# Anthropic: claude-3-5-sonnet-20241022, claude-3-opus-20240229, etc.
-# OpenAI: gpt-4o, gpt-4-turbo, gpt-3.5-turbo, etc.
-# Gemini: gemini-1.5-pro, gemini-1.5-flash, etc.
 MODEL=
 
 # Agent Configuration
@@ -288,14 +248,29 @@ MAX_ITERATIONS=10        # Maximum iteration loops
 
 # Tool Configuration
 ENABLE_SHELL=false       # Enable shell command execution
+
+# Memory Management
+MEMORY_ENABLED=true
+MEMORY_MAX_CONTEXT_TOKENS=100000
+MEMORY_COMPRESSION_THRESHOLD=40000
+
+# Base URLs (optional - for proxies, Azure, local deployments)
+ANTHROPIC_BASE_URL=
+OPENAI_BASE_URL=
+GEMINI_BASE_URL=
 ```
 
-### Default Models by Provider
+See [Configuration Guide](docs/configuration.md) for detailed options and presets.
+
+## Default Models by Provider
 
 If no `MODEL` is specified, these defaults are used:
-- **Anthropic**: `claude-3-5-sonnet-20241022`
-- **OpenAI**: `gpt-4o`
-- **Gemini**: `gemini-1.5-pro`
+
+| Provider | Default Model |
+|----------|--------------|
+| Anthropic | `claude-3-5-sonnet-20241022` |
+| OpenAI | `gpt-4o` |
+| Gemini | `gemini-1.5-pro` |
 
 ## Testing
 
@@ -312,52 +287,16 @@ python test_basic.py
 - **Anthropic API Documentation**: [docs.anthropic.com](https://docs.anthropic.com)
 - **Tool Use Guide**: [Tool Use (Function Calling)](https://docs.anthropic.com/en/docs/tool-use)
 
-## Advanced Features
-
-### Automatic Retry on Rate Limits
-
-All LLM providers now support automatic retry with exponential backoff when encountering rate limit errors (429). This is especially useful for free tier APIs:
-
-```python
-# Automatic retry is enabled by default
-# When you hit rate limits, the system will:
-# 1. Detect the 429 error
-# 2. Wait with exponential backoff (1s, 2s, 4s, 8s, ...)
-# 3. Retry up to 5 times
-# 4. Add random jitter to avoid thundering herd
-
-# Example output when hitting rate limit:
-# ⚠️  Rate limit error: 429 You exceeded your current quota
-#    Retrying in 2.3s... (attempt 1/5)
-```
-
-**Retry Configuration** (optional):
-```python
-from llm import create_llm, RetryConfig
-
-# Custom retry behavior
-llm = create_llm(
-    provider="gemini",
-    api_key="your_key",
-    model="gemini-1.5-flash",
-    retry_config=RetryConfig(
-        max_retries=10,      # More retries
-        initial_delay=2.0,   # Start with 2s
-        max_delay=120.0,     # Cap at 2 minutes
-        exponential_base=2.0,
-        jitter=True          # Add randomness
-    )
-)
-```
-
 ## Future Improvements
 
 - [ ] Streaming output to display agent thinking process
-- [ ] Conversation memory to maintain context
+- [x] Intelligent memory management with compression
 - [ ] Parallel tool execution
 - [ ] Detailed logging and tracing
 - [ ] Human-in-the-loop for dangerous operations
 - [ ] Multi-agent collaboration system
+- [ ] Persistent memory with session recovery
+- [ ] Semantic retrieval with vector database
 
 ## License
 

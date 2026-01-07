@@ -182,8 +182,8 @@ class TokenTracker:
                 break
 
         if not pricing:
-            logger.warning(f"No pricing found for model {model}, returning 0")
-            # Fallback to default pricing
+            logger.info(f"No pricing found for model {model}, using default pricing (DeepSeek-Reasoner equivalent)")
+            # Fallback to default pricing (using reasonable mid-tier estimate)
             pricing = self.PRICING["default"]
 
         # Calculate cost
