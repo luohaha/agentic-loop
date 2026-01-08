@@ -15,6 +15,12 @@ A Python agentic loop system supporting both **ReAct** and **Plan-and-Execute** 
   - Multiple compression strategies (sliding window, selective, deletion)
   - Supports long-running tasks without context overflow
 
+- 🛠️ **Advanced File Tools** (Phase 1):
+  - **Glob**: Fast file pattern matching (`**/*.py`, `src/**/*.js`)
+  - **Grep**: Regex-based content search with context/count modes
+  - **Edit**: Surgical file editing without reading entire contents
+  - **Todo List**: Complex task management with progress tracking
+
 - 🤖 **Multiple LLM Support**:
   - **Anthropic Claude** (Claude 3.5 Sonnet, Haiku, Opus, etc.)
   - **OpenAI GPT** (GPT-4o, GPT-4o-mini, O1, O3, etc.)
@@ -67,21 +73,26 @@ Edit `.env` file and configure your LLM provider:
 
 ```bash
 # Choose your LLM provider (anthropic, openai, or gemini)
-LLM_PROVIDER=anthropic
+LLM_PROVIDER=gemini
 
 # Add the corresponding API key
-ANTHROPIC_API_KEY=your_api_key_here
-# OPENAI_API_KEY=your_api_key_here
-# GEMINI_API_KEY=your_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 
 # Optional: specify a model (uses provider defaults if not set)
 # MODEL=claude-3-5-sonnet-20241022
 # MODEL=gpt-4o
-# MODEL=gemini-1.5-pro
+# MODEL=gemini-2.5-flash
+
+# Phase 1 Feature Flags
+ENABLE_TODO_SYSTEM=true                    # Enable todo list management
+ENABLE_ADVANCED_TOOLS=true                 # Enable Glob/Grep/Edit tools
+ENABLE_CONTEXT_INJECTION=true              # Enable environment/git context
 
 # Memory Management (optional, enabled by default)
 MEMORY_ENABLED=true
-MEMORY_COMPRESSION_THRESHOLD=40000
+MEMORY_COMPRESSION_THRESHOLD=25000         # Compress when context grows large
 ```
 
 **Quick setup for different providers:**
@@ -154,12 +165,15 @@ agentic-loop/
 │   ├── base.py                  # BaseLLM abstract class
 │   ├── anthropic_llm.py         # Anthropic Claude adapter
 │   ├── openai_llm.py            # OpenAI GPT adapter
-│   └── gemini_llm.py            # Google Gemini adapter
+│   ├── gemini_llm.py            # Google Gemini adapter
+│   └── retry.py                 # Retry logic for rate limits
 ├── agent/                       # Agent implementations
 │   ├── base.py                  # BaseAgent abstract class
+│   ├── context.py               # Context injection
 │   ├── react_agent.py           # ReAct mode
 │   ├── plan_execute_agent.py   # Plan-and-Execute mode
-│   └── tool_executor.py         # Tool execution engine
+│   ├── tool_executor.py         # Tool execution engine
+│   └── todo.py                  # Todo list management
 ├── memory/                      # 🧠 Memory management system
 │   ├── types.py                 # Core data structures
 │   ├── manager.py               # Memory orchestrator
@@ -169,9 +183,13 @@ agentic-loop/
 ├── tools/                       # Tool implementations
 │   ├── base.py                  # BaseTool abstract class
 │   ├── file_ops.py              # File operation tools
+│   ├── advanced_file_ops.py     # 🌟 Glob, Grep, Edit tools (Phase 1)
+│   ├── todo.py                  # Todo list tool (Phase 1)
 │   ├── calculator.py            # Code execution/calculator
 │   ├── shell.py                 # Shell commands
 │   └── web_search.py            # Web search
+├── utils/                       # Utilities
+│   └── logger.py                # Logging setup
 └── examples/                    # Example code
     ├── react_example.py         # ReAct mode example
     └── plan_execute_example.py  # Plan-Execute example
