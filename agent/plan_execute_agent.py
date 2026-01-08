@@ -65,7 +65,7 @@ IMPORTANT RULES:
 TOOL GUIDELINES:
 - glob_files: Fast file pattern matching
 - grep_content: Search file contents efficiently
-- file_read: Only when you need full file contents
+- read_file: Only when you need full file contents
 - edit_file: For targeted edits
 
 When you complete the step, provide a brief summary of your results.

@@ -79,13 +79,28 @@ class MemoryManager:
         # Add to short-term memory
         self.short_term.add_message(message)
 
+        # Log memory state for debugging
+        logger.debug(
+            f"Memory state: {self.current_tokens} tokens, "
+            f"{self.short_term.count()}/{self.config.short_term_message_count} messages, "
+            f"full={self.short_term.is_full()}"
+        )
+
         # Check if compression is needed
         self.was_compressed_last_iteration = False
         if self.config.enable_compression:
             should_compress, reason = self._should_compress()
             if should_compress:
-                logger.info(f"Triggering compression: {reason}")
+                logger.info(f"🗜️  Triggering compression: {reason}")
                 self.compress()
+            else:
+                # Log why compression was NOT triggered
+                logger.debug(
+                    f"Compression check: current={self.current_tokens}, "
+                    f"threshold={self.config.compression_threshold}, "
+                    f"target={self.config.target_working_memory_tokens}, "
+                    f"short_term_full={self.short_term.is_full()}"
+                )
 
         # Recalculate current tokens to account for messages evicted from short-term memory
         # Note: compress() already recalculates, so only do this if we didn't compress
@@ -142,7 +157,7 @@ class MemoryManager:
         if strategy is None:
             strategy = self._select_strategy(messages)
 
-        logger.info(f"Compressing {len(messages)} messages using {strategy} strategy")
+        logger.info(f"🗜️  Compressing {len(messages)} messages using {strategy} strategy")
 
         try:
             # Perform compression
@@ -167,12 +182,14 @@ class MemoryManager:
             self.short_term.clear()
 
             # Update current token count
+            old_tokens = self.current_tokens
             self.current_tokens = self._recalculate_current_tokens()
 
+            # Log compression results
             logger.info(
-                f"Compression complete: saved {compressed.token_savings} tokens "
-                f"({compressed.savings_percentage:.1f}%), "
-                f"compression ratio: {compressed.compression_ratio:.2f}"
+                f"✅ Compression complete: {compressed.original_tokens} → {compressed.compressed_tokens} tokens "
+                f"({compressed.savings_percentage:.1f}% saved, ratio: {compressed.compression_ratio:.2f}), "
+                f"context: {old_tokens} → {self.current_tokens} tokens"
             )
 
             return compressed
@@ -192,12 +209,14 @@ class MemoryManager:
             return True, f"hard_limit ({self.current_tokens} > {self.config.compression_threshold})"
 
         # Soft limit: compress if over target and have enough messages
+        # BUG FIX: Changed from > to >= because deque(maxlen=20) means count() max is 20,
+        # and 20 > 20 would never be true
         if self.current_tokens > self.config.target_working_memory_tokens:
-            if self.short_term.count() > self.config.short_term_message_count:
+            if self.short_term.is_full():  # More semantic: check if short-term memory is full
                 return (
                     True,
                     f"soft_limit ({self.current_tokens} > {self.config.target_working_memory_tokens}, "
-                    f"{self.short_term.count()} messages)",
+                    f"short-term memory full: {self.short_term.count()} messages)",
                 )
 
         return False, None

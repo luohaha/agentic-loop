@@ -39,7 +39,7 @@ User: Create a data pipeline that reads CSV, processes it, and generates report
 Assistant: I'll use the todo list to track this multi-step task.
 [Calls manage_todo_list with operation="add" for each step]
 [Marks first task as in_progress before starting]
-[Uses file_read tool]
+[Uses read_file tool]
 [Marks as completed, moves to next task]
 </good_example>
 
@@ -53,9 +53,9 @@ Assistant: [Immediately starts without planning, forgets steps halfway through]
 For file operations:
 - Use glob_files to find files by pattern (fast, efficient)
 - Use grep_content to search within files (much better than reading all files)
-- Use file_read only when you need full contents (avoid reading multiple large files at once)
+- Use read_file only when you need full contents (avoid reading multiple large files at once)
 - Use edit_file for small changes (don't read entire file then write back)
-- Use file_write only for creating new files or complete rewrites
+- Use write_file only for creating new files or complete rewrites
 
 CRITICAL: Never read multiple large files in a single iteration - this causes context overflow!
 Instead: Use grep_content to find specific information, then read only what you need.
@@ -77,7 +77,7 @@ Result: Efficient, minimal tokens used
 <bad_example>
 Task: Find all Python files that import 'requests'
 Approach:
-1. Use file_read on every Python file one by one
+1. Use read_file on every Python file one by one
 2. Manually search through content
 Result: Wasteful, uses 100x more tokens
 </bad_example>
@@ -95,9 +95,9 @@ When you have enough information, provide your final answer directly without usi
 
 <available_tools>
 You have access to various tools including:
-- File operations: glob_files, grep_content, edit_file, file_read, file_write, file_search
+- File operations: glob_files, grep_content, edit_file, read_file, write_file, search_files
 - Task management: manage_todo_list
-- Utilities: calculator, web_search, shell (if enabled)
+- Utilities: calculate, web_search, shell (if enabled)
 
 Always choose the most efficient tool for the task at hand.
 </available_tools>"""
