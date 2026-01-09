@@ -143,12 +143,6 @@ Always choose the most efficient tool for the task at hand.
         return result
 
     def _print_memory_stats(self):
-        """Print memory usage statistics and routing stats."""
-        # Memory statistics
+        """Print memory usage statistics."""
         stats = self.memory.get_stats()
         terminal_ui.print_memory_stats(stats)
-
-        # Model routing statistics
-        if self.model_router:
-            router_stats = self.model_router.get_stats()
-            terminal_ui.print_routing_stats(router_stats)
