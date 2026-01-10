@@ -15,12 +15,11 @@ from agent.todo import TodoList
 from utils import setup_logger, get_log_file_path, terminal_ui
 
 
-def create_agent(mode: str = "react", enable_shell: bool = False):
+def create_agent(mode: str = "react"):
     """Factory function to create agents with tools.
 
     Args:
         mode: Agent mode - 'react' or 'plan'
-        enable_shell: Whether to enable shell command execution
 
     Returns:
         Configured agent instance
@@ -32,20 +31,11 @@ def create_agent(mode: str = "react", enable_shell: bool = False):
         FileSearchTool(),
         CalculatorTool(),
         WebSearchTool(),
+        GlobTool(),
+        GrepTool(),
+        EditTool(),
+        ShellTool(),
     ]
-
-    # Add advanced file operation tools if enabled
-    if Config.ENABLE_ADVANCED_TOOLS:
-        tools.extend([
-            GlobTool(),
-            GrepTool(),
-            EditTool(),
-        ])
-        terminal_ui.print_success("Advanced file tools enabled (Glob, Grep, Edit)")
-
-    if enable_shell or Config.ENABLE_SHELL:
-        terminal_ui.print_warning("Shell tool enabled - use with caution!")
-        tools.append(ShellTool())
 
     # Create LLM instance with retry configuration and base_url
     llm = create_llm(
@@ -66,9 +56,8 @@ def create_agent(mode: str = "react", enable_shell: bool = False):
 
     return agent_class(
         llm=llm,
-        max_iterations=Config.MAX_ITERATIONS,
         tools=tools,
-        enable_todo=Config.ENABLE_TODO_SYSTEM,
+        max_iterations=Config.MAX_ITERATIONS,
     )
 
 
@@ -87,11 +76,6 @@ def main():
         help="Agent mode: 'react' for ReAct loop, 'plan' for Plan-and-Execute",
     )
     parser.add_argument("--task", type=str, help="Task for the agent to complete")
-    parser.add_argument(
-        "--enable-shell",
-        action="store_true",
-        help="Enable shell command execution (use with caution)",
-    )
 
     args = parser.parse_args()
 
@@ -133,8 +117,8 @@ def main():
     }
     terminal_ui.print_config(config_dict)
 
-    agent = create_agent(args.mode, args.enable_shell)
-    result = agent.run(task, enable_context=Config.ENABLE_CONTEXT_INJECTION)
+    agent = create_agent(args.mode)
+    result = agent.run(task)
 
     terminal_ui.print_final_answer(result)
 

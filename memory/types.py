@@ -57,9 +57,14 @@ class CompressedMemory:
 
 @dataclass
 class CompressionStrategy:
-    """Enum-like class for compression strategies."""
+    """Enum-like class for compression strategies.
+
+    Supported strategies:
+    - DELETION: Used for very few messages (<5), simply removes oldest
+    - SLIDING_WINDOW: Keeps recent N messages, summarizes the rest
+    - SELECTIVE: Intelligently preserves important messages, summarizes others (primary strategy)
+    """
 
     DELETION = "deletion"  # Simply delete old messages
     SLIDING_WINDOW = "sliding_window"  # Summarize old messages, keep recent
     SELECTIVE = "selective"  # Preserve important messages, summarize others
-    HIERARCHICAL = "hierarchical"  # Multi-level summarization

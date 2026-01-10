@@ -33,19 +33,6 @@ class ShortTermMemory:
         """
         return list(self.messages)
 
-    def get_recent(self, count: int) -> List[LLMMessage]:
-        """Get the N most recent messages.
-
-        Args:
-            count: Number of recent messages to retrieve
-
-        Returns:
-            List of recent messages, oldest to newest
-        """
-        if count >= len(self.messages):
-            return list(self.messages)
-        return list(self.messages)[-count:]
-
     def clear(self) -> List[LLMMessage]:
         """Clear all messages and return them.
 
@@ -71,19 +58,3 @@ class ShortTermMemory:
             Number of messages in short-term memory
         """
         return len(self.messages)
-
-    def peek_oldest(self) -> LLMMessage:
-        """Peek at the oldest message without removing it.
-
-        Returns:
-            Oldest message, or None if empty
-        """
-        return self.messages[0] if self.messages else None
-
-    def peek_newest(self) -> LLMMessage:
-        """Peek at the newest message without removing it.
-
-        Returns:
-            Newest message, or None if empty
-        """
-        return self.messages[-1] if self.messages else None

@@ -88,19 +88,18 @@ class MemoryManager:
 
         # Check if compression is needed
         self.was_compressed_last_iteration = False
-        if self.config.enable_compression:
-            should_compress, reason = self._should_compress()
-            if should_compress:
-                logger.info(f"🗜️  Triggering compression: {reason}")
-                self.compress()
-            else:
-                # Log why compression was NOT triggered
-                logger.debug(
-                    f"Compression check: current={self.current_tokens}, "
-                    f"threshold={self.config.compression_threshold}, "
-                    f"target={self.config.target_working_memory_tokens}, "
-                    f"short_term_full={self.short_term.is_full()}"
-                )
+        should_compress, reason = self._should_compress()
+        if should_compress:
+            logger.info(f"🗜️  Triggering compression: {reason}")
+            self.compress()
+        else:
+            # Log why compression was NOT triggered
+            logger.debug(
+                f"Compression check: current={self.current_tokens}, "
+                f"threshold={self.config.compression_threshold}, "
+                f"target={self.config.target_working_memory_tokens}, "
+                f"short_term_full={self.short_term.is_full()}"
+            )
 
         # Recalculate current tokens to account for messages evicted from short-term memory
         # Note: compress() already recalculates, so only do this if we didn't compress

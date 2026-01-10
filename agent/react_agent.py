@@ -103,25 +103,23 @@ You have access to various tools including:
 Always choose the most efficient tool for the task at hand.
 </available_tools>"""
 
-    def run(self, task: str, enable_context: bool = True) -> str:
+    def run(self, task: str) -> str:
         """Execute ReAct loop until task is complete.
 
         Args:
             task: The task to complete
-            enable_context: Whether to inject environment context (default: True)
 
         Returns:
             Final answer as a string
         """
-        # Build system message with optional context
+        # Build system message with context
         system_content = self.SYSTEM_PROMPT
-        if enable_context:
-            try:
-                context = format_context_prompt()
-                system_content = context + "\n" + system_content
-            except Exception as e:
-                # If context gathering fails, continue without it
-                pass
+        try:
+            context = format_context_prompt()
+            system_content = context + "\n" + system_content
+        except Exception as e:
+            # If context gathering fails, continue without it
+            pass
 
         # Initialize memory with system message and user task
         self.memory.add_message(LLMMessage(role="system", content=system_content))

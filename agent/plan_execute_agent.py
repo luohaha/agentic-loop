@@ -95,12 +95,11 @@ IMPORTANT RULES:
 Provide your final answer to the user based on the execution results above.
 </instructions>"""
 
-    def run(self, task: str, enable_context: bool = True) -> str:
+    def run(self, task: str) -> str:
         """Execute Plan-and-Execute loop.
 
         Args:
             task: The task to complete
-            enable_context: Whether to inject environment context (default: True)
 
         Returns:
             Final answer as a string
@@ -108,7 +107,7 @@ Provide your final answer to the user based on the execution results above.
         # Phase 1: Create plan
         terminal_ui.console.print()
         terminal_ui.console.rule("[bold cyan]PHASE 1: PLANNING[/bold cyan]", style="cyan")
-        plan = self._create_plan(task, enable_context=enable_context)
+        plan = self._create_plan(task)
         terminal_ui.console.print()
         terminal_ui.console.print(plan, style="dim")
 
@@ -143,25 +142,23 @@ Provide your final answer to the user based on the execution results above.
         stats = self.memory.get_stats()
         terminal_ui.print_memory_stats(stats)
 
-    def _create_plan(self, task: str, enable_context: bool = True) -> str:
+    def _create_plan(self, task: str) -> str:
         """Generate a plan without using tools.
 
         Args:
             task: The task to plan
-            enable_context: Whether to inject environment context
 
         Returns:
             Generated plan as string
         """
-        # Build system message with optional context
+        # Build system message with context
         system_content = "You are a planning expert. Create clear, actionable plans."
-        if enable_context:
-            try:
-                context = format_context_prompt()
-                system_content = context + "\n" + system_content
-            except Exception:
-                # If context gathering fails, continue without it
-                pass
+        try:
+            context = format_context_prompt()
+            system_content = context + "\n" + system_content
+        except Exception:
+            # If context gathering fails, continue without it
+            pass
 
         messages = [
             LLMMessage(role="system", content=system_content),

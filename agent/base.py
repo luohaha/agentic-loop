@@ -19,10 +19,9 @@ class BaseAgent(ABC):
     def __init__(
         self,
         llm: BaseLLM,
+        tools: List[BaseTool],
         max_iterations: int = 10,
-        tools: List[BaseTool] = None,
         memory_config: Optional[MemoryConfig] = None,
-        enable_todo: bool = True,
     ):
         """Initialize the agent.
 
@@ -31,7 +30,6 @@ class BaseAgent(ABC):
             max_iterations: Maximum number of agent loop iterations
             tools: List of tools available to the agent
             memory_config: Optional memory configuration (None = use defaults)
-            enable_todo: Whether to enable todo list management (default: True)
         """
         self.llm = llm
         self.max_iterations = max_iterations
@@ -45,9 +43,8 @@ class BaseAgent(ABC):
         else:
             tools = list(tools)  # Make a copy to avoid modifying original
 
-        if enable_todo:
-            todo_tool = TodoTool(self.todo_list)
-            tools.append(todo_tool)
+        todo_tool = TodoTool(self.todo_list)
+        tools.append(todo_tool)
 
         self.tool_executor = ToolExecutor(tools)
 
