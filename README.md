@@ -15,11 +15,11 @@ A Python agentic loop system supporting both **ReAct** and **Plan-and-Execute** 
   - Multiple compression strategies (sliding window, selective, deletion)
   - Supports long-running tasks without context overflow
 
-- 🛠️ **Advanced File Tools** (Phase 1):
+- 🛠️ **Advanced File Tools**:
   - **Glob**: Fast file pattern matching (`**/*.py`, `src/**/*.js`)
   - **Grep**: Regex-based content search with context/count modes
   - **Edit**: Surgical file editing without reading entire contents
-  - **Todo List**: Complex task management with progress tracking
+  - **Sub-agent Delegation**: Create sub-agents to handle complex subtasks
 
 - 🤖 **Multiple LLM Support**:
   - **Anthropic Claude** (Claude 3.5 Sonnet, Haiku, Opus, etc.)
@@ -29,10 +29,11 @@ A Python agentic loop system supporting both **ReAct** and **Plan-and-Execute** 
   - Custom base URL support (proxies, Azure, local deployments)
 
 - 🛠️ **Rich Toolset**:
-  - File operations (read/write/search)
-  - Python code execution/calculator
+  - File operations (read/write/search/glob/grep/edit)
+  - Python code execution and calculator
   - Web search (DuckDuckGo)
-  - Shell command execution (optional)
+  - Shell command execution
+  - Sub-agent delegation for complex subtasks
 
 - 🔄 **Robust & Resilient**:
   - Automatic retry with exponential backoff for rate limits (429 errors)
@@ -44,24 +45,41 @@ A Python agentic loop system supporting both **ReAct** and **Plan-and-Execute** 
   - Comprehensive documentation
   - Easy to extend and customize
 
-## Quick Start
+## Installation
 
-### 1. Installation
+### Option 1: Install from PyPI (Recommended - Coming Soon)
+
+```bash
+pip install agentic-loop
+```
+
+### Option 2: Install from Source (Development)
 
 ```bash
 # Clone the repository
-git clone <your-repo>
-cd agentic-loop
+git clone https://github.com/yourusername/AgenticLoop.git
+cd AgenticLoop
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Install in development mode
+pip install -e .
 ```
 
-### 2. Configuration
+### Option 3: Install from GitHub
+
+```bash
+pip install git+https://github.com/yourusername/AgenticLoop.git
+```
+
+### Option 4: Docker
+
+```bash
+docker pull yourusername/agentic-loop:latest
+docker run -it --rm -e ANTHROPIC_API_KEY=your_key agentic-loop interactive
+```
+
+## Quick Start
+
+### 1. Configuration
 
 Create `.env` file:
 
@@ -72,27 +90,42 @@ cp .env.example .env
 Edit `.env` file and configure your LLM provider:
 
 ```bash
-# Choose your LLM provider (anthropic, openai, or gemini)
-LLM_PROVIDER=gemini
+# LLM Provider (required)
+LLM_PROVIDER=gemini  # Options: anthropic, openai, gemini
 
-# Add the corresponding API key
+# API Keys (set the one for your chosen provider)
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 GEMINI_API_KEY=your_gemini_api_key_here
 
-# Optional: specify a model (uses provider defaults if not set)
-# MODEL=claude-3-5-sonnet-20241022
-# MODEL=gpt-4o
-# MODEL=gemini-2.5-flash
+# Model (optional - uses provider defaults if not set)
+MODEL=gemini-2.5-flash
 
-# Phase 1 Feature Flags
-ENABLE_TODO_SYSTEM=true                    # Enable todo list management
-ENABLE_ADVANCED_TOOLS=true                 # Enable Glob/Grep/Edit tools
-ENABLE_CONTEXT_INJECTION=true              # Enable environment/git context
+# Base URLs (optional - for proxies, Azure, local deployments)
+ANTHROPIC_BASE_URL=
+OPENAI_BASE_URL=
+GEMINI_BASE_URL=
 
-# Memory Management (optional, enabled by default)
-MEMORY_ENABLED=true
-MEMORY_COMPRESSION_THRESHOLD=25000         # Compress when context grows large
+# Agent Configuration
+MAX_ITERATIONS=100  # Maximum iteration loops
+
+# Memory Management
+MEMORY_MAX_CONTEXT_TOKENS=100000
+MEMORY_TARGET_TOKENS=30000
+MEMORY_COMPRESSION_THRESHOLD=25000
+MEMORY_SHORT_TERM_SIZE=100
+MEMORY_COMPRESSION_RATIO=0.3
+
+# Retry Configuration (for handling rate limits)
+RETRY_MAX_ATTEMPTS=5
+RETRY_INITIAL_DELAY=1.0
+RETRY_MAX_DELAY=60.0
+
+# Logging
+LOG_DIR=logs
+LOG_LEVEL=DEBUG
+LOG_TO_FILE=true
+LOG_TO_CONSOLE=false
 ```
 
 **Quick setup for different providers:**
@@ -101,21 +134,41 @@ MEMORY_COMPRESSION_THRESHOLD=25000         # Compress when context grows large
 - **OpenAI GPT**: Set `LLM_PROVIDER=openai` and `OPENAI_API_KEY`
 - **Google Gemini**: Set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY`
 
-### 3. Run
+### 2. Usage
 
-#### ReAct Mode (Interactive)
+#### Command Line (After Installation)
+
+```bash
+# Interactive mode
+agentic-loop
+
+# Single task (ReAct mode)
+agentic-loop --mode react "Calculate 123 * 456"
+
+# Single task (Plan-Execute mode)
+agentic-loop --mode plan "Build a web scraper"
+
+# Show help
+agentic-loop --help
+```
+
+#### Direct Python Execution (Development)
+
+If running from source without installation:
+
+**ReAct Mode (Interactive)**
 
 ```bash
 python main.py --mode react --task "Calculate 123 * 456"
 ```
 
-#### Plan-and-Execute Mode (Planning)
+**Plan-and-Execute Mode (Planning)**
 
 ```bash
 python main.py --mode plan --task "Search for Python agent tutorials and summarize top 3 results"
 ```
 
-#### Interactive Input
+**Interactive Input**
 
 ```bash
 python main.py --mode react
@@ -182,12 +235,13 @@ agentic-loop/
 │   └── token_tracker.py         # Token tracking & costs
 ├── tools/                       # Tool implementations
 │   ├── base.py                  # BaseTool abstract class
-│   ├── file_ops.py              # File operation tools
-│   ├── advanced_file_ops.py     # 🌟 Glob, Grep, Edit tools (Phase 1)
-│   ├── todo.py                  # Todo list tool (Phase 1)
+│   ├── file_ops.py              # File operation tools (read/write/search)
+│   ├── advanced_file_ops.py     # Advanced tools (Glob/Grep/Edit)
 │   ├── calculator.py            # Code execution/calculator
 │   ├── shell.py                 # Shell commands
-│   └── web_search.py            # Web search
+│   ├── web_search.py            # Web search
+│   ├── todo.py                  # Todo list management
+│   └── delegation.py            # Sub-agent delegation
 ├── utils/                       # Utilities
 │   └── logger.py                # Logging setup
 └── examples/                    # Example code
@@ -202,93 +256,25 @@ agentic-loop/
 - **[Memory Management](docs/memory-management.md)**: Memory system documentation
 - **[Advanced Features](docs/advanced-features.md)**: Optimization and advanced techniques
 - **[Extending](docs/extending.md)**: How to add tools, agents, and LLM providers
-
-## Comparing the Two Modes
-
-### ReAct Mode
-
-**Best for**: Interactive problem-solving, tasks requiring flexible strategy adjustment
-
-**Workflow**:
-1. Think: Analyze the current situation
-2. Act: Call tools
-3. Observe: Review results
-4. Repeat until complete
-
-**Example**:
-```python
-from agent.react_agent import ReActAgent
-from tools.calculator import CalculatorTool
-
-agent = ReActAgent(llm=llm, tools=[CalculatorTool()])
-result = agent.run("Calculate (123 + 456) * 789")
-```
-
-### Plan-and-Execute Mode
-
-**Best for**: Complex multi-step tasks, problems requiring holistic planning
-
-**Workflow**:
-1. Plan: Create a complete step-by-step plan
-2. Execute: Execute each step sequentially
-3. Synthesize: Integrate all results into final answer
-
-**Example**:
-```python
-from agent.plan_execute_agent import PlanExecuteAgent
-from tools.file_ops import FileReadTool, FileWriteTool
-
-agent = PlanExecuteAgent(
-    llm=llm,
-    tools=[FileReadTool(), FileWriteTool()]
-)
-result = agent.run("Analyze data.csv and generate report")
-```
+- **[Packaging Guide](docs/packaging.md)**: Package and distribute the system
 
 ## Configuration Options
 
-All configuration is done via `.env` file:
+See the full configuration template in `.env.example`. Key options:
 
-```bash
-# LLM Provider (required)
-LLM_PROVIDER=anthropic  # Options: anthropic, openai, gemini
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `LLM_PROVIDER` | LLM provider (anthropic/openai/gemini) | `anthropic` |
+| `MODEL` | Specific model to use | Provider default |
+| `MAX_ITERATIONS` | Maximum agent iterations | `100` |
+| `MEMORY_MAX_CONTEXT_TOKENS` | Maximum context window | `100000` |
+| `MEMORY_TARGET_TOKENS` | Target working memory size | `30000` |
+| `MEMORY_COMPRESSION_THRESHOLD` | Compress when exceeded | `25000` |
+| `MEMORY_SHORT_TERM_SIZE` | Recent messages to keep | `100` |
+| `RETRY_MAX_ATTEMPTS` | Retry attempts for rate limits | `5` |
+| `LOG_LEVEL` | Logging level | `DEBUG` |
 
-# API Keys (set the one for your chosen provider)
-ANTHROPIC_API_KEY=your_key_here
-OPENAI_API_KEY=your_key_here
-GEMINI_API_KEY=your_key_here
-
-# Model (optional - uses provider defaults if not set)
-MODEL=
-
-# Agent Configuration
-MAX_ITERATIONS=10        # Maximum iteration loops
-
-# Tool Configuration
-ENABLE_SHELL=false       # Enable shell command execution
-
-# Memory Management
-MEMORY_ENABLED=true
-MEMORY_MAX_CONTEXT_TOKENS=100000
-MEMORY_COMPRESSION_THRESHOLD=40000
-
-# Base URLs (optional - for proxies, Azure, local deployments)
-ANTHROPIC_BASE_URL=
-OPENAI_BASE_URL=
-GEMINI_BASE_URL=
-```
-
-See [Configuration Guide](docs/configuration.md) for detailed options and presets.
-
-## Default Models by Provider
-
-If no `MODEL` is specified, these defaults are used:
-
-| Provider | Default Model |
-|----------|--------------|
-| Anthropic | `claude-3-5-sonnet-20241022` |
-| OpenAI | `gpt-4o` |
-| Gemini | `gemini-1.5-pro` |
+See [Configuration Guide](docs/configuration.md) for detailed options.
 
 ## Testing
 
@@ -320,6 +306,36 @@ python test_basic.py
 
 MIT License
 
+## Development
+
+### Building and Packaging
+
+See the [Packaging Guide](docs/packaging.md) for instructions on:
+- Building distributable packages
+- Publishing to PyPI
+- Creating Docker images
+- Generating standalone executables
+
+Quick commands:
+```bash
+# Install locally for development
+./scripts/install_local.sh
+
+# Build distribution packages
+./scripts/build.sh
+
+# Publish to PyPI
+./scripts/publish.sh
+```
+
 ## Contributing
 
-Issues and Pull Requests are welcome!
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+### How to Contribute
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request

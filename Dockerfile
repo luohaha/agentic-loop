@@ -1,0 +1,34 @@
+# Multi-stage Docker build for agentic-loop
+
+FROM python:3.12-slim AS base
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create a non-root user
+RUN useradd -m -u 1000 agentuser && chown -R agentuser:agentuser /app
+USER agentuser
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Entry point
+ENTRYPOINT ["python", "main.py"]
+CMD ["--help"]
+
+# Usage:
+# Build: docker build -t agentic-loop .
+# Run: docker run -it --rm -e ANTHROPIC_API_KEY=your_key agentic-loop interactive

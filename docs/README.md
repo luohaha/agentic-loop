@@ -17,6 +17,10 @@ Welcome to the Agentic Loop documentation! This directory contains comprehensive
 
 - **[Extending Guide](extending.md)**: How to add custom tools, agents, and LLM providers
 
+## Distribution and Packaging
+
+- **[Packaging Guide](packaging.md)**: Detailed guide for packaging and distribution
+
 ## Quick Navigation
 
 ### By Use Case
@@ -31,6 +35,7 @@ Welcome to the Agentic Loop documentation! This directory contains comprehensive
 - **Create custom agents** → [Extending: Creating Agents](extending.md#creating-new-agent-modes)
 - **Understand retry behavior** → [Advanced: Retry](advanced-features.md#automatic-retry-with-exponential-backoff)
 - **Switch LLM providers** → [Configuration: Providers](configuration.md#provider-specific-configuration)
+- **Package and distribute** → [Packaging Guide](packaging.md)
 
 ### By Topic
 
@@ -102,6 +107,12 @@ Each guide is self-contained but cross-referenced for easy navigation:
    - Best practices
    - Testing extensions
 
+6. **[packaging.md](packaging.md)** - Distribution guide:
+   - Building packages
+   - Publishing to PyPI
+   - Docker deployment
+   - Creating executables
+
 ## Contributing to Documentation
 
 When updating documentation:
@@ -120,6 +131,11 @@ When updating documentation:
 - Consult [advanced-features.md](advanced-features.md) for troubleshooting
 
 ## Version History
+
+- **v1.1** (2026-01-12): Added packaging documentation
+  - Added packaging guide
+  - Updated README with installation options
+  - Added development and contribution sections
 
 - **v1.0** (2025-01-07): Initial documentation split from main README
   - Added memory management documentation

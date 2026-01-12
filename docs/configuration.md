@@ -80,63 +80,54 @@ GEMINI_BASE_URL=     # e.g., https://generativelanguage.googleapis.com
 ### Basic Settings
 
 ```bash
-# Maximum iterations for agent loops (default: 10)
-MAX_ITERATIONS=10
+# Maximum iterations for agent loops (default: 100)
+MAX_ITERATIONS=100
 
-# Increase for complex tasks that need more steps
-# MAX_ITERATIONS=20
+# Increase for very complex tasks
+# MAX_ITERATIONS=200
 
 # Decrease for simple tasks to save costs
-# MAX_ITERATIONS=5
+# MAX_ITERATIONS=50
 ```
 
-### Tool Configuration
-
-```bash
-# Enable/disable shell command execution (default: false)
-ENABLE_SHELL=false
-
-# Set to true to allow shell commands (use with caution!)
-# ENABLE_SHELL=true
-```
+All tools (including shell commands) are enabled by default. Tools available:
+- File operations (read, write, search)
+- Advanced file tools (glob, grep, edit)
+- Calculator and Python code execution
+- Web search
+- Shell command execution
+- Sub-agent delegation
 
 ## Memory Management Configuration
 
 ### Basic Memory Settings
 
 ```bash
-# Enable memory management (default: true)
-MEMORY_ENABLED=true
-
-# Maximum total context size in tokens
+# Maximum total context size in tokens (default: 100000)
 MEMORY_MAX_CONTEXT_TOKENS=100000
 
-# Target size after compression
-MEMORY_TARGET_TOKENS=50000
+# Target size after compression (default: 30000)
+MEMORY_TARGET_TOKENS=30000
 
-# Trigger compression when context exceeds this
-MEMORY_COMPRESSION_THRESHOLD=40000
+# Trigger compression when context exceeds this (default: 25000)
+MEMORY_COMPRESSION_THRESHOLD=25000
 ```
 
 ### Advanced Memory Settings
 
 ```bash
-# Number of recent messages to keep in short-term memory
-MEMORY_SHORT_TERM_SIZE=20
+# Number of recent messages to keep in short-term memory (default: 100)
+MEMORY_SHORT_TERM_SIZE=100
 
 # Target compression ratio (0.3 = compress to 30% of original size)
 MEMORY_COMPRESSION_RATIO=0.3
-
-# Compression strategy
-# Options: sliding_window, selective, deletion
-MEMORY_COMPRESSION_STRATEGY=sliding_window
-
-# Preserve system prompts during compression
-MEMORY_PRESERVE_SYSTEM_PROMPTS=true
-
-# Preserve tool call messages during compression
-MEMORY_PRESERVE_TOOL_CALLS=true
 ```
+
+Memory management is always enabled. The system automatically:
+- Preserves system prompts during compression
+- Keeps tool call pairs (tool_use + tool_result) together
+- Protects stateful tools (like todo list) from compression
+- Selects compression strategy based on message content
 
 ### Memory Compression Strategies
 
@@ -164,7 +155,6 @@ For minimizing API costs:
 MODEL=gpt-4o-mini  # or gemini-1.5-flash, claude-3-5-haiku
 
 # Enable aggressive memory compression
-MEMORY_ENABLED=true
 MEMORY_COMPRESSION_THRESHOLD=30000  # Compress earlier
 MEMORY_COMPRESSION_RATIO=0.2  # More aggressive compression
 
@@ -176,13 +166,20 @@ MAX_ITERATIONS=8
 
 ### Rate Limit Handling
 
-Retry behavior is automatically configured with sensible defaults:
+Configure retry behavior via environment variables:
 
-- **Max Retries**: 5 attempts
-- **Initial Delay**: 1 second
-- **Max Delay**: 60 seconds
-- **Exponential Base**: 2.0 (doubles each retry)
-- **Jitter**: Enabled (adds randomness)
+```bash
+# Retry configuration for rate limits (defaults shown)
+RETRY_MAX_ATTEMPTS=5        # Maximum retry attempts
+RETRY_INITIAL_DELAY=1.0     # Initial delay in seconds
+RETRY_MAX_DELAY=60.0        # Maximum delay in seconds
+```
+
+The system automatically:
+- Uses exponential backoff (doubles delay each retry)
+- Adds jitter (randomness) to avoid thundering herd
+- Retries on 429 (rate limit) and 5xx errors
+- Respects provider-specific retry headers
 
 ### Custom Retry Configuration
 
@@ -265,7 +262,6 @@ For maximum capability, cost is secondary:
 LLM_PROVIDER=anthropic
 MODEL=claude-3-opus-20240229
 MAX_ITERATIONS=20
-MEMORY_ENABLED=true
 MEMORY_MAX_CONTEXT_TOKENS=200000
 ```
 
@@ -277,7 +273,6 @@ Good balance of performance and cost:
 LLM_PROVIDER=anthropic
 MODEL=claude-3-5-sonnet-20241022
 MAX_ITERATIONS=10
-MEMORY_ENABLED=true
 MEMORY_MAX_CONTEXT_TOKENS=100000
 MEMORY_COMPRESSION_THRESHOLD=40000
 ```
@@ -290,7 +285,6 @@ Minimize costs while maintaining functionality:
 LLM_PROVIDER=openai
 MODEL=gpt-4o-mini
 MAX_ITERATIONS=8
-MEMORY_ENABLED=true
 MEMORY_COMPRESSION_THRESHOLD=30000
 MEMORY_COMPRESSION_RATIO=0.2
 ```
@@ -303,7 +297,6 @@ For APIs with strict rate limits:
 LLM_PROVIDER=gemini
 MODEL=gemini-1.5-flash
 MAX_ITERATIONS=5
-MEMORY_ENABLED=true
 MEMORY_COMPRESSION_THRESHOLD=20000
 ```
 
@@ -354,8 +347,6 @@ python main.py --task "Calculate 1+1"
 LLM_PROVIDER=gemini
 MODEL=gemini-1.5-flash  # Cheap and fast for testing
 MAX_ITERATIONS=5
-MEMORY_ENABLED=false  # Simpler debugging
-ENABLE_SHELL=true  # More flexibility
 ```
 
 ### Production
@@ -365,8 +356,6 @@ ENABLE_SHELL=true  # More flexibility
 LLM_PROVIDER=anthropic
 MODEL=claude-3-5-sonnet-20241022  # Reliable and capable
 MAX_ITERATIONS=10
-MEMORY_ENABLED=true  # Cost optimization
-ENABLE_SHELL=false  # Security
 ```
 
 ### CI/CD
@@ -376,8 +365,6 @@ ENABLE_SHELL=false  # Security
 LLM_PROVIDER=openai
 MODEL=gpt-4o-mini  # Fast and cheap for tests
 MAX_ITERATIONS=5
-MEMORY_ENABLED=false
-ENABLE_SHELL=false
 ```
 
 ## Security Best Practices
@@ -385,8 +372,9 @@ ENABLE_SHELL=false
 1. **Never commit `.env`**: It's in `.gitignore` by default
 2. **Use environment-specific configs**: Different settings for dev/prod
 3. **Rotate API keys**: Regularly update your API keys
-4. **Limit shell access**: Only enable `ENABLE_SHELL` when necessary
+4. **Review shell commands**: The agent can execute shell commands - monitor logs
 5. **Use base URLs cautiously**: Verify custom endpoints are trusted
+6. **Limit iterations**: Set `MAX_ITERATIONS` appropriately to avoid runaway costs
 
 ## Troubleshooting
 
@@ -407,6 +395,18 @@ Check that:
 rm -rf __pycache__/
 python main.py --task "Your task"
 ```
+
+## Logging Configuration
+
+```bash
+# Logging settings (defaults shown)
+LOG_DIR=logs                    # Directory for log files
+LOG_LEVEL=DEBUG                 # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_TO_FILE=true                # Save logs to file
+LOG_TO_CONSOLE=false            # Print to console (WARNING+ always shown)
+```
+
+Log files are created in the `logs/` directory with timestamps: `agentic_loop_YYYYMMDD_HHMMSS.log`
 
 ## Next Steps
 

@@ -1,0 +1,19 @@
+#!/bin/bash
+# Install the package locally for development/testing
+
+set -e
+
+echo "📦 Installing agentic-loop locally..."
+
+# Install in editable mode with dependencies
+python3 -m pip install -e .
+
+echo ""
+echo "✅ Installation complete!"
+echo ""
+echo "Try it out:"
+echo "  agentic-loop --help"
+echo "  agentic-loop interactive"
+echo ""
+echo "Or import in Python:"
+echo "  from agent.react_agent import ReActAgent"
