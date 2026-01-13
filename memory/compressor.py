@@ -44,6 +44,7 @@ Provide a concise but comprehensive summary that captures the essential informat
         messages: List[LLMMessage],
         strategy: str = CompressionStrategy.SLIDING_WINDOW,
         target_tokens: int = None,
+        orphaned_tool_use_ids: set = None,
     ) -> CompressedMemory:
         """Compress messages using specified strategy.
 
@@ -51,6 +52,8 @@ Provide a concise but comprehensive summary that captures the essential informat
             messages: List of messages to compress
             strategy: Compression strategy to use
             target_tokens: Target token count for compressed output
+            orphaned_tool_use_ids: Set of tool_use IDs from previous summaries that are
+                                   waiting for tool_result in current messages
 
         Returns:
             CompressedMemory object
@@ -63,11 +66,14 @@ Provide a concise but comprehensive summary that captures the essential informat
             original_tokens = self._estimate_tokens(messages)
             target_tokens = int(original_tokens * self.config.compression_ratio)
 
+        if orphaned_tool_use_ids is None:
+            orphaned_tool_use_ids = set()
+
         # Select and apply compression strategy
         if strategy == CompressionStrategy.SLIDING_WINDOW:
             return self._compress_sliding_window(messages, target_tokens)
         elif strategy == CompressionStrategy.SELECTIVE:
-            return self._compress_selective(messages, target_tokens)
+            return self._compress_selective(messages, target_tokens, orphaned_tool_use_ids)
         elif strategy == CompressionStrategy.DELETION:
             return self._compress_deletion(messages)
         else:
@@ -135,7 +141,7 @@ Provide a concise but comprehensive summary that captures the essential informat
             )
 
     def _compress_selective(
-        self, messages: List[LLMMessage], target_tokens: int
+        self, messages: List[LLMMessage], target_tokens: int, orphaned_tool_use_ids: set = None
     ) -> CompressedMemory:
         """Compress using selective preservation strategy.
 
@@ -145,12 +151,16 @@ Provide a concise but comprehensive summary that captures the essential informat
         Args:
             messages: Messages to compress
             target_tokens: Target token count
+            orphaned_tool_use_ids: Set of tool_use IDs from previous summaries
 
         Returns:
             CompressedMemory object
         """
+        if orphaned_tool_use_ids is None:
+            orphaned_tool_use_ids = set()
+
         # Separate preserved vs compressible messages
-        preserved, to_compress = self._separate_messages(messages)
+        preserved, to_compress = self._separate_messages(messages, orphaned_tool_use_ids)
 
         if not to_compress:
             # Nothing to compress
@@ -235,7 +245,7 @@ Provide a concise but comprehensive summary that captures the essential informat
         )
 
     def _separate_messages(
-        self, messages: List[LLMMessage]
+        self, messages: List[LLMMessage], orphaned_tool_use_ids_from_summaries: set = None
     ) -> Tuple[List[LLMMessage], List[LLMMessage]]:
         """Separate messages into preserved and compressible.
 
@@ -246,13 +256,18 @@ Provide a concise but comprehensive summary that captures the essential informat
         4. **Critical rule**: Tool pairs (tool_use + tool_result) must stay together
            - If one is preserved, the other must be preserved too
            - If one is compressed, the other must be compressed too
+        5. **Critical fix**: Preserve tool_result that match orphaned tool_use from previous summaries
 
         Args:
             messages: All messages
+            orphaned_tool_use_ids_from_summaries: Tool_use IDs from previous summaries waiting for results
 
         Returns:
             Tuple of (preserved, to_compress)
         """
+        if orphaned_tool_use_ids_from_summaries is None:
+            orphaned_tool_use_ids_from_summaries = set()
+
         preserve_indices = set()
 
         # Step 1: Mark system messages for preservation
@@ -260,8 +275,28 @@ Provide a concise but comprehensive summary that captures the essential informat
             if self.config.preserve_system_prompts and msg.role == "system":
                 preserve_indices.add(i)
 
-        # Step 2: Mark protected tools for preservation (CRITICAL for stateful tools)
-        tool_pairs = self._find_tool_pairs(messages)
+        # Step 2: Find tool pairs and orphaned tool_use messages
+        tool_pairs, orphaned_tool_use_indices = self._find_tool_pairs(messages)
+
+        # Step 2a: CRITICAL - Preserve orphaned tool_use (waiting for tool_result)
+        # These must NEVER be compressed, or we'll lose the tool_use without its result
+        for orphan_idx in orphaned_tool_use_indices:
+            preserve_indices.add(orphan_idx)
+
+        # Step 2b: CRITICAL FIX - Preserve tool_result that match orphaned tool_use from previous summaries
+        # These results finally arrived and must be preserved to match their tool_use
+        for i, msg in enumerate(messages):
+            if msg.role == "user" and isinstance(msg.content, list):
+                for block in msg.content:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        tool_use_id = block.get("tool_use_id")
+                        if tool_use_id in orphaned_tool_use_ids_from_summaries:
+                            preserve_indices.add(i)
+                            logger.info(
+                                f"Preserving tool_result for orphaned tool_use '{tool_use_id}' from previous summary"
+                            )
+
+        # Step 2c: Mark protected tools for preservation (CRITICAL for stateful tools)
         protected_pairs = self._find_protected_tool_pairs(messages, tool_pairs)
         for assistant_idx, user_idx in protected_pairs:
             preserve_indices.add(assistant_idx)
@@ -293,15 +328,18 @@ Provide a concise but comprehensive summary that captures the essential informat
 
         logger.info(
             f"Separated: {len(preserved)} preserved, {len(to_compress)} to compress "
-            f"({len(tool_pairs)} tool pairs, {len(protected_pairs)} protected)"
+            f"({len(tool_pairs)} tool pairs, {len(protected_pairs)} protected, "
+            f"{len(orphaned_tool_use_indices)} orphaned tool_use)"
         )
         return preserved, to_compress
 
-    def _find_tool_pairs(self, messages: List[LLMMessage]) -> List[List[int]]:
+    def _find_tool_pairs(self, messages: List[LLMMessage]) -> tuple[List[List[int]], List[int]]:
         """Find tool_use/tool_result pairs in messages.
 
         Returns:
-            List of pairs, each pair is [assistant_index, user_index]
+            Tuple of (pairs, orphaned_tool_use_indices)
+            - pairs: List of [assistant_index, user_index] for matched pairs
+            - orphaned_tool_use_indices: List of message indices with unmatched tool_use
         """
         pairs = []
         pending_tool_uses = {}  # tool_id -> message_index
@@ -327,7 +365,16 @@ Provide a concise but comprehensive summary that captures the essential informat
                             pairs.append([assistant_idx, i])
                             del pending_tool_uses[tool_use_id]
 
-        return pairs
+        # Remaining items in pending_tool_uses are orphaned (no matching result yet)
+        orphaned_indices = list(pending_tool_uses.values())
+
+        if orphaned_indices:
+            logger.warning(
+                f"Found {len(orphaned_indices)} orphaned tool_use without matching tool_result - "
+                f"these will be preserved to wait for results"
+            )
+
+        return pairs, orphaned_indices
 
     def _find_protected_tool_pairs(
         self, messages: List[LLMMessage], tool_pairs: List[List[int]]

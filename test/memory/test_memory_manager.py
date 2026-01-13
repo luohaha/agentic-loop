@@ -1,0 +1,447 @@
+"""Unit tests for MemoryManager."""
+import pytest
+from memory import MemoryConfig, MemoryManager
+from memory.types import CompressionStrategy
+from llm.base import LLMMessage
+
+
+class TestMemoryManagerBasics:
+    """Test basic MemoryManager functionality."""
+
+    def test_initialization(self, mock_llm):
+        """Test MemoryManager initialization."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        assert manager.config == config
+        assert manager.llm == mock_llm
+        assert manager.current_tokens == 0
+        assert manager.compression_count == 0
+        assert len(manager.summaries) == 0
+        assert len(manager.system_messages) == 0
+
+    def test_add_system_message(self, mock_llm):
+        """Test that system messages are stored separately."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        system_msg = LLMMessage(role="system", content="You are a helpful assistant.")
+        manager.add_message(system_msg)
+
+        assert len(manager.system_messages) == 1
+        assert manager.system_messages[0] == system_msg
+        # System messages don't go to short-term memory
+        assert manager.short_term.count() == 0
+
+    def test_add_user_message(self, mock_llm):
+        """Test adding user messages."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        user_msg = LLMMessage(role="user", content="Hello")
+        manager.add_message(user_msg)
+
+        assert manager.short_term.count() == 1
+        assert manager.current_tokens > 0
+
+    def test_add_assistant_message(self, mock_llm):
+        """Test adding assistant messages."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        assistant_msg = LLMMessage(role="assistant", content="Hi there!")
+        manager.add_message(assistant_msg)
+
+        assert manager.short_term.count() == 1
+        assert manager.current_tokens > 0
+
+    def test_get_context_structure(self, mock_llm, simple_messages):
+        """Test context structure with system, summaries, and recent messages."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        # Add system message
+        system_msg = LLMMessage(role="system", content="You are helpful.")
+        manager.add_message(system_msg)
+
+        # Add regular messages
+        for msg in simple_messages:
+            manager.add_message(msg)
+
+        context = manager.get_context_for_llm()
+
+        # Context should have: system message + recent messages
+        assert len(context) >= len(simple_messages)
+        assert context[0] == system_msg  # System message first
+
+    def test_reset(self, mock_llm, simple_messages):
+        """Test resetting memory manager."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        # Add some messages
+        for msg in simple_messages:
+            manager.add_message(msg)
+
+        # Reset
+        manager.reset()
+
+        assert manager.current_tokens == 0
+        assert manager.compression_count == 0
+        assert len(manager.summaries) == 0
+        assert len(manager.system_messages) == 0
+        assert manager.short_term.count() == 0
+
+
+class TestMemoryCompression:
+    """Test compression triggering and behavior."""
+
+    def test_compression_on_short_term_full(self, mock_llm):
+        """Test compression triggers when short-term memory is full."""
+        config = MemoryConfig(
+            short_term_message_count=5,
+            target_working_memory_tokens=100000,  # Very high to avoid soft limit
+            compression_threshold=200000,  # Very high to avoid hard limit
+        )
+        manager = MemoryManager(config, mock_llm)
+
+        # Add messages until short-term is full
+        for i in range(5):
+            manager.add_message(LLMMessage(role="user", content=f"Message {i}"))
+
+        # After 5 messages, compression should have been triggered and short-term cleared
+        assert manager.compression_count == 1
+        assert manager.was_compressed_last_iteration
+        # After compression, short-term is cleared so it's not full
+        assert not manager.short_term.is_full()
+
+    def test_compression_on_soft_limit(self, mock_llm):
+        """Test compression triggers on soft limit (target tokens)."""
+        config = MemoryConfig(
+            target_working_memory_tokens=50,  # Very low to trigger easily
+            compression_threshold=10000,
+            short_term_message_count=100,  # Large enough to not trigger on count
+        )
+        manager = MemoryManager(config, mock_llm)
+
+        # Add messages until we exceed target tokens
+        long_message = "This is a long message. " * 50
+        manager.add_message(LLMMessage(role="user", content=long_message))
+
+        # Should trigger compression
+        assert manager.compression_count >= 1
+
+    def test_compression_on_hard_limit(self, mock_llm):
+        """Test compression triggers on hard limit (compression threshold)."""
+        config = MemoryConfig(
+            target_working_memory_tokens=10000,
+            compression_threshold=100,  # Very low to trigger easily
+            short_term_message_count=100,
+        )
+        manager = MemoryManager(config, mock_llm)
+
+        # Add long message to exceed hard limit
+        long_message = "This is a very long message. " * 100
+        manager.add_message(LLMMessage(role="user", content=long_message))
+
+        assert manager.compression_count >= 1
+
+    def test_compression_creates_summary(self, mock_llm, simple_messages):
+        """Test that compression creates a summary."""
+        config = MemoryConfig(
+            short_term_message_count=3,
+            target_working_memory_tokens=100000,
+            compression_threshold=200000,
+        )
+        manager = MemoryManager(config, mock_llm)
+
+        # Add messages to trigger compression
+        for msg in simple_messages:
+            manager.add_message(msg)
+
+        # Trigger compression
+        assert manager.compression_count >= 1
+        assert len(manager.summaries) >= 1
+
+        # Check that short-term was cleared after compression
+        # Note: may have new messages added after compression
+        assert manager.short_term.count() < len(simple_messages)
+
+    def test_get_stats(self, mock_llm, simple_messages):
+        """Test getting memory statistics."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        for msg in simple_messages:
+            manager.add_message(msg)
+
+        stats = manager.get_stats()
+
+        assert "current_tokens" in stats
+        assert "total_input_tokens" in stats
+        assert "total_output_tokens" in stats
+        assert "compression_count" in stats
+        assert "total_savings" in stats
+        assert "compression_cost" in stats
+        assert "net_savings" in stats
+        assert "short_term_count" in stats
+        assert "summary_count" in stats
+
+
+class TestToolCallMatching:
+    """Test tool_use and tool_result matching scenarios."""
+
+    def test_tool_pairs_preserved_together(self, mock_llm, tool_use_messages):
+        """Test that tool_use and tool_result pairs are preserved together."""
+        config = MemoryConfig(
+            short_term_message_count=3,
+            short_term_min_message_count=2,
+            target_working_memory_tokens=100000,
+            compression_threshold=200000,
+        )
+        manager = MemoryManager(config, mock_llm)
+
+        # Add tool messages
+        for msg in tool_use_messages:
+            manager.add_message(msg)
+
+        # Force compression
+        manager.compress(strategy=CompressionStrategy.SELECTIVE)
+
+        # Get context
+        context = manager.get_context_for_llm()
+
+        # Check that tool_use and tool_result are both present
+        tool_use_ids = set()
+        tool_result_ids = set()
+
+        for msg in context:
+            if isinstance(msg.content, list):
+                for block in msg.content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "tool_use":
+                            tool_use_ids.add(block.get("id"))
+                        elif block.get("type") == "tool_result":
+                            tool_result_ids.add(block.get("tool_use_id"))
+
+        # Every tool_use should have a matching tool_result
+        assert tool_use_ids == tool_result_ids, \
+            f"Mismatched tool calls: tool_use_ids={tool_use_ids}, tool_result_ids={tool_result_ids}"
+
+    def test_mismatched_tool_calls_detected(self, mock_llm, mismatched_tool_messages):
+        """Test behavior with mismatched tool_use/tool_result pairs."""
+        config = MemoryConfig(
+            short_term_message_count=4,
+            short_term_min_message_count=2,
+        )
+        manager = MemoryManager(config, mock_llm)
+
+        # Add mismatched tool messages
+        for msg in mismatched_tool_messages:
+            manager.add_message(msg)
+
+        # Force compression
+        manager.compress(strategy=CompressionStrategy.SELECTIVE)
+
+        # Get context and check for mismatches
+        context = manager.get_context_for_llm()
+
+        tool_use_ids = set()
+        tool_result_ids = set()
+
+        for msg in context:
+            if isinstance(msg.content, list):
+                for block in msg.content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "tool_use":
+                            tool_use_ids.add(block.get("id"))
+                        elif block.get("type") == "tool_result":
+                            tool_result_ids.add(block.get("tool_use_id"))
+
+        # This test documents the current behavior with mismatched pairs
+        # In the mismatched scenario, we expect tool_1 to be missing its result
+        # This is the bug we're trying to catch
+        if tool_use_ids != tool_result_ids:
+            missing_results = tool_use_ids - tool_result_ids
+            missing_uses = tool_result_ids - tool_use_ids
+            print(f"Detected mismatch - missing results: {missing_results}, missing uses: {missing_uses}")
+
+    def test_protected_tool_always_preserved(self, mock_llm, protected_tool_messages):
+        """Test that protected tools (like manage_todo_list) are always preserved."""
+        config = MemoryConfig(
+            short_term_message_count=10,  # Large enough to avoid auto-compression
+            short_term_min_message_count=1,
+        )
+        manager = MemoryManager(config, mock_llm)
+
+        # Add protected tool messages
+        for msg in protected_tool_messages:
+            manager.add_message(msg)
+
+        # Manually trigger compression
+        compressed = manager.compress(strategy=CompressionStrategy.SELECTIVE)
+
+        # Check that todo list tool was preserved
+        assert compressed is not None
+
+        # Verify the protected tool is in preserved messages or summaries
+        found_protected = False
+
+        # Check in all summaries (including the one just created)
+        for summary in manager.summaries:
+            for msg in summary.preserved_messages:
+                if isinstance(msg.content, list):
+                    for block in msg.content:
+                        if isinstance(block, dict):
+                            if block.get("type") == "tool_use" and block.get("name") == "manage_todo_list":
+                                found_protected = True
+                                break
+
+        assert found_protected, "Protected tool 'manage_todo_list' should be preserved"
+
+    def test_multiple_tool_pairs_in_sequence(self, mock_llm):
+        """Test multiple consecutive tool_use/tool_result pairs."""
+        config = MemoryConfig(
+            short_term_message_count=10,
+            short_term_min_message_count=2,
+        )
+        manager = MemoryManager(config, mock_llm)
+
+        # Create multiple tool pairs
+        messages = []
+        for i in range(3):
+            messages.extend([
+                LLMMessage(role="user", content=f"Request {i}"),
+                LLMMessage(
+                    role="assistant",
+                    content=[
+                        {
+                            "type": "tool_use",
+                            "id": f"tool_{i}",
+                            "name": f"tool_{i}",
+                            "input": {}
+                        }
+                    ]
+                ),
+                LLMMessage(
+                    role="user",
+                    content=[
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": f"tool_{i}",
+                            "content": f"result_{i}"
+                        }
+                    ]
+                ),
+                LLMMessage(role="assistant", content=f"Response {i}"),
+            ])
+
+        for msg in messages:
+            manager.add_message(msg)
+
+        # Force compression
+        manager.compress(strategy=CompressionStrategy.SELECTIVE)
+
+        # Verify all pairs are matched
+        context = manager.get_context_for_llm()
+        tool_use_ids = set()
+        tool_result_ids = set()
+
+        for msg in context:
+            if isinstance(msg.content, list):
+                for block in msg.content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "tool_use":
+                            tool_use_ids.add(block.get("id"))
+                        elif block.get("type") == "tool_result":
+                            tool_result_ids.add(block.get("tool_use_id"))
+
+        assert tool_use_ids == tool_result_ids
+
+
+class TestEdgeCases:
+    """Test edge cases and error scenarios."""
+
+    def test_empty_memory_compression(self, mock_llm):
+        """Test compressing empty memory."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        result = manager.compress()
+        assert result is None
+
+    def test_single_message_compression(self, mock_llm):
+        """Test compressing with only one message."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        manager.add_message(LLMMessage(role="user", content="Hello"))
+        result = manager.compress()
+
+        assert result is not None
+
+    def test_actual_token_counts(self, mock_llm):
+        """Test using actual token counts from LLM response."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        # Add message with actual token counts
+        msg = LLMMessage(role="assistant", content="Response")
+        actual_tokens = {"input": 100, "output": 50}
+
+        manager.add_message(msg, actual_tokens=actual_tokens)
+
+        stats = manager.get_stats()
+        assert stats["total_input_tokens"] >= 100
+        assert stats["total_output_tokens"] >= 50
+
+    def test_compression_with_mixed_content(self, mock_llm):
+        """Test compression with mixed text and tool content."""
+        config = MemoryConfig(short_term_message_count=5)
+        manager = MemoryManager(config, mock_llm)
+
+        messages = [
+            LLMMessage(role="user", content="Text only"),
+            LLMMessage(
+                role="assistant",
+                content=[
+                    {"type": "text", "text": "Response with tool"},
+                    {"type": "tool_use", "id": "t1", "name": "tool", "input": {}}
+                ]
+            ),
+            LLMMessage(
+                role="user",
+                content=[{"type": "tool_result", "tool_use_id": "t1", "content": "result"}]
+            ),
+            LLMMessage(role="assistant", content="Final response"),
+        ]
+
+        for msg in messages:
+            manager.add_message(msg)
+
+        # Should handle mixed content without errors
+        result = manager.compress(strategy=CompressionStrategy.SELECTIVE)
+        assert result is not None
+
+    def test_strategy_auto_selection(self, mock_llm, tool_use_messages, simple_messages):
+        """Test automatic strategy selection based on message content."""
+        config = MemoryConfig()
+        manager = MemoryManager(config, mock_llm)
+
+        # Add tool messages - should select SELECTIVE strategy
+        for msg in tool_use_messages:
+            manager.add_message(msg)
+
+        # Force compression without specifying strategy
+        manager.compress()
+
+        # Verify compression happened
+        assert manager.compression_count == 1
+
+        # Test with simple messages - should select different strategy
+        manager.reset()
+        for msg in simple_messages[:2]:  # Few messages
+            manager.add_message(msg)
+
+        manager.compress()
+        assert manager.compression_count == 1

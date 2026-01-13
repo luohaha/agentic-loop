@@ -159,9 +159,16 @@ class MemoryManager:
         logger.info(f"🗜️  Compressing {len(messages)} messages using {strategy} strategy")
 
         try:
-            # Perform compression
+            # CRITICAL: Find orphaned tool_use IDs from previous summaries
+            # These tool_use are waiting for tool_result that might be in current short_term
+            orphaned_tool_use_ids = self._get_orphaned_tool_use_ids_from_summaries()
+
+            # Perform compression (pass orphaned IDs so compressor can protect matching tool_results)
             compressed = self.compressor.compress(
-                messages, strategy=strategy, target_tokens=self._calculate_target_tokens()
+                messages,
+                strategy=strategy,
+                target_tokens=self._calculate_target_tokens(),
+                orphaned_tool_use_ids=orphaned_tool_use_ids
             )
 
             # Track compression results
@@ -275,6 +282,42 @@ class MemoryManager:
         original_tokens = self.current_tokens
         target = int(original_tokens * self.config.compression_ratio)
         return max(target, 500)  # Minimum 500 tokens for summary
+
+    def _get_orphaned_tool_use_ids_from_summaries(self) -> set:
+        """Get tool_use IDs from summaries that don't have matching tool_result yet.
+
+        These are tool_use that were preserved in previous compressions but their
+        tool_result might arrive in later messages (in current short_term).
+
+        Returns:
+            Set of tool_use IDs that are waiting for results
+        """
+        orphaned_ids = set()
+
+        for summary in self.summaries:
+            # Collect tool_use IDs from preserved messages
+            tool_use_ids = set()
+            tool_result_ids = set()
+
+            for msg in summary.preserved_messages:
+                if isinstance(msg.content, list):
+                    for block in msg.content:
+                        if isinstance(block, dict):
+                            if block.get("type") == "tool_use":
+                                tool_use_ids.add(block.get("id"))
+                            elif block.get("type") == "tool_result":
+                                tool_result_ids.add(block.get("tool_use_id"))
+
+            # Orphaned = tool_use without result in the same summary
+            summary_orphaned = tool_use_ids - tool_result_ids
+            orphaned_ids.update(summary_orphaned)
+
+        if orphaned_ids:
+            logger.debug(
+                f"Found {len(orphaned_ids)} orphaned tool_use IDs in summaries: {orphaned_ids}"
+            )
+
+        return orphaned_ids
 
     def _recalculate_current_tokens(self) -> int:
         """Recalculate current token count from scratch.
