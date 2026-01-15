@@ -1,156 +1,122 @@
-"""Test file for WebFetchTool."""
-import sys
-import os
+"""Tests for WebFetchTool."""
+import json
+import types
 
-# Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import pytest
+from requests.structures import CaseInsensitiveDict
 
-from tools.web_fetch import WebFetchTool
+from tools.web_fetch import WebFetchTool, MAX_RESPONSE_BYTES
 
 
-def test_url_normalization():
-    """Test URL normalization and HTTP to HTTPS upgrade."""
+class FakeResponse:
+    def __init__(self, url: str, status_code: int = 200, headers=None, body: bytes = b""):
+        self.url = url
+        self.status_code = status_code
+        self.headers = CaseInsensitiveDict(headers or {})
+        self._body = body
+        self.encoding = None
+
+    def iter_content(self, chunk_size: int = 65536):
+        for idx in range(0, len(self._body), chunk_size):
+            yield self._body[idx : idx + chunk_size]
+
+
+def parse_result(result: str):
+    data = json.loads(result)
+    assert "ok" in data
+    return data
+
+
+def build_tool(monkeypatch, responses):
     tool = WebFetchTool()
 
-    # Test HTTP to HTTPS upgrade
-    assert tool._normalize_url("http://example.com") == "https://example.com"
+    def fake_request(self, session, url, headers, timeout):
+        if url not in responses:
+            raise AssertionError(f"Unexpected URL: {url}")
+        return responses[url]
 
-    # Test HTTPS stays HTTPS
-    assert tool._normalize_url("https://example.com") == "https://example.com"
-
-    # Test missing protocol
-    assert tool._normalize_url("example.com") == "https://example.com"
-
-    # Test with spaces
-    assert tool._normalize_url("  https://example.com  ") == "https://example.com"
-
-    print("✓ URL normalization tests passed!")
+    monkeypatch.setattr(tool, "_request", types.MethodType(fake_request, tool))
+    monkeypatch.setattr(tool, "_resolve_host", types.MethodType(lambda _self, _host, _port: ["93.184.216.34"], tool))
+    return tool
 
 
-def test_html_to_text():
-    """Test HTML to text conversion."""
+def test_invalid_url_requires_scheme():
     tool = WebFetchTool()
-
-    html = "<h1>Title</h1><p>Hello <b>world</b></p>"
-    result = tool._html_to_text(html)
-
-    assert "Title" in result
-    assert "Hello" in result
-    assert "world" in result
-    assert "<" not in result  # No HTML tags
-
-    print("✓ HTML to text conversion tests passed!")
+    result = parse_result(tool.execute(url="example.com"))
+    assert result["ok"] is False
+    assert result["error_code"] == "invalid_url"
 
 
-def test_html_to_markdown():
-    """Test HTML to markdown conversion."""
+def test_blocked_localhost():
     tool = WebFetchTool()
-
-    html = "<h1>Title</h1><p>Hello <b>world</b></p>"
-    result = tool._html_to_markdown(html)
-
-    assert "# Title" in result
-    assert "**world**" in result
-
-    print("✓ HTML to markdown conversion tests passed!")
+    result = parse_result(tool.execute(url="http://localhost"))
+    assert result["ok"] is False
+    assert result["error_code"] == "blocked_host"
 
 
-def test_large_content_handling():
-    """Test large content truncation."""
+def test_blocked_ip_literal():
     tool = WebFetchTool()
-
-    # Create large content (>50KB)
-    large_content = "A" * 60000
-    result = tool._summarize_large_content(large_content, "https://example.com")
-
-    assert len(result) < 10000  # Much smaller than original
-    assert "truncated" in result.lower()
-    assert "60,000" in result  # Shows original size
-
-    print("✓ Large content handling tests passed!")
+    result = parse_result(tool.execute(url="http://127.0.0.1"))
+    assert result["ok"] is False
+    assert result["error_code"] == "blocked_ip"
 
 
-def test_format_conversion():
-    """Test format conversion logic."""
-    tool = WebFetchTool()
-
-    html = "<h1>Test</h1><p>Content</p>"
-
-    # HTML format
-    result_html = tool._convert_format(html, "html", "https://example.com")
-    assert result_html == html
-
-    # Text format
-    result_text = tool._convert_format(html, "text", "https://example.com")
-    assert "Test" in result_text
-    assert "Content" in result_text
-
-    # Markdown format
-    result_markdown = tool._convert_format(html, "markdown", "https://example.com")
-    assert "# Test" in result_markdown
-
-    print("✓ Format conversion tests passed!")
+def test_redirect_blocked(monkeypatch):
+    responses = {
+        "http://example.com": FakeResponse(
+            "http://example.com",
+            status_code=302,
+            headers={"location": "http://127.0.0.1"},
+        )
+    }
+    tool = build_tool(monkeypatch, responses)
+    result = parse_result(tool.execute(url="http://example.com"))
+    assert result["ok"] is False
+    assert result["error_code"] == "redirect_blocked"
 
 
-def test_error_handling():
-    """Test error handling."""
-    tool = WebFetchTool()
-
-    # Test invalid URL
-    result = tool.execute("not a valid url", "markdown")
-    assert "Error:" in result
-
-    # Test with mock - should handle connection errors gracefully
-    result = tool.execute("https://this-domain-does-not-exist-12345.com", "markdown")
-    assert "Error:" in result
-
-    print("✓ Error handling tests passed!")
-
-
-def test_real_fetch():
-    """Test actual web fetch with a reliable test site."""
-    tool = WebFetchTool()
-
-    # Use httpbin.org which is designed for testing
-    try:
-        result = tool.execute("https://httpbin.org/html", "text")
-        # Should contain some content or error message
-        assert isinstance(result, str)
-        print(f"✓ Real fetch test completed (got {len(result)} chars)")
-    except Exception as e:
-        print(f"⚠ Real fetch test skipped (network issue): {e}")
+def test_too_large(monkeypatch):
+    responses = {
+        "http://example.com": FakeResponse(
+            "http://example.com",
+            status_code=200,
+            headers={"content-length": str(MAX_RESPONSE_BYTES + 1)},
+            body=b"A" * 10,
+        )
+    }
+    tool = build_tool(monkeypatch, responses)
+    result = parse_result(tool.execute(url="http://example.com", format="text"))
+    assert result["ok"] is False
+    assert result["error_code"] == "too_large"
 
 
-def test_execute_signature():
-    """Test that execute method has correct signature."""
-    tool = WebFetchTool()
-
-    # Test with default format
-    result = tool.execute("https://example.com")
-    assert isinstance(result, str)
-
-    # Test with explicit format
-    result = tool.execute("https://example.com", "html")
-    assert isinstance(result, str)
-
-    print("✓ Execute signature tests passed!")
-
-
-def main():
-    """Run all tests."""
-    print("Running WebFetchTool tests...\n")
-
-    test_url_normalization()
-    test_html_to_text()
-    test_html_to_markdown()
-    test_large_content_handling()
-    test_format_conversion()
-    test_error_handling()
-    test_execute_signature()
-    test_real_fetch()
-
-    print("\n✅ All tests passed!")
+def test_html_markdown_success(monkeypatch):
+    html = "<html><head><title>Title</title></head><body><h1>Title</h1><p>Hello</p></body></html>"
+    responses = {
+        "http://example.com": FakeResponse(
+            "http://example.com",
+            status_code=200,
+            headers={"content-type": "text/html; charset=utf-8"},
+            body=html.encode("utf-8"),
+        )
+    }
+    tool = build_tool(monkeypatch, responses)
+    result = parse_result(tool.execute(url="http://example.com", format="markdown"))
+    assert result["ok"] is True
+    assert "Title" in result["output"]
 
 
-if __name__ == "__main__":
-    main()
+@pytest.mark.parametrize("format_value", ["markdown", "text", "html"])
+def test_format_variants(monkeypatch, format_value):
+    html = "<html><body><p>Content</p></body></html>"
+    responses = {
+        "http://example.com": FakeResponse(
+            "http://example.com",
+            status_code=200,
+            headers={"content-type": "text/html; charset=utf-8"},
+            body=html.encode("utf-8"),
+        )
+    }
+    tool = build_tool(monkeypatch, responses)
+    result = parse_result(tool.execute(url="http://example.com", format=format_value))
+    assert result["ok"] is True
