@@ -40,6 +40,11 @@ class Config:
     MEMORY_SHORT_TERM_SIZE = int(os.getenv("MEMORY_SHORT_TERM_SIZE", "100"))
     MEMORY_COMPRESSION_RATIO = float(os.getenv("MEMORY_COMPRESSION_RATIO", "0.3"))
 
+    # Tool Result Processing Configuration
+    # Model for summarizing large tool results (e.g., "openai/gpt-4o-mini", "anthropic/claude-3-haiku-20240307")
+    # If not set, LLM summarization is disabled and falls back to smart truncation
+    TOOL_RESULT_SUMMARY_MODEL = os.getenv("TOOL_RESULT_SUMMARY_MODEL")
+
     # Logging Configuration
     LOG_DIR = os.getenv("LOG_DIR", "logs")
     LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
@@ -79,6 +84,7 @@ class Config:
             short_term_message_count=cls.MEMORY_SHORT_TERM_SIZE,
             compression_ratio=cls.MEMORY_COMPRESSION_RATIO,
             enable_compression=cls.MEMORY_ENABLED,
+            tool_result_summary_model=cls.TOOL_RESULT_SUMMARY_MODEL,
         )
 
     @classmethod

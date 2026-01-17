@@ -32,6 +32,26 @@ class MemoryConfig:
     enable_compression: bool = True  # Enable/disable compression
     compression_model: Optional[str] = None  # Model to use for compression (None = same as agent)
 
+    # Tool result processing (always enabled)
+    tool_result_storage_threshold: int = 10000  # Store externally if result > N tokens
+    tool_result_storage_path: Optional[str] = None  # Path to SQLite DB (None = in-memory)
+    tool_result_summary_model: Optional[str] = (
+        None  # Model for summarizing large tool results (None = disable)
+    )
+
+    # Tool-specific token budgets (can be overridden per tool)
+    tool_result_budgets: Dict[str, int] = field(
+        default_factory=lambda: {
+            "read_file": 1000,
+            "grep_content": 800,
+            "execute_shell": 500,
+            "web_search": 1200,
+            "web_fetch": 1500,
+            "glob_files": 600,
+            "default": 1000,
+        }
+    )
+
 
 @dataclass
 class CompressedMemory:
