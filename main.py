@@ -29,6 +29,7 @@ from tools.git_tools import (
 )
 from tools.shell import ShellTool
 from tools.smart_edit import SmartEditTool
+from tools.retrieve_tool_result import RetrieveToolResultTool
 from tools.web_fetch import WebFetchTool
 from tools.web_search import WebSearchTool
 from utils import get_log_file_path, setup_logger, terminal_ui
@@ -100,6 +101,10 @@ def create_agent(mode: str = "react"):
     # Add delegation tool (requires agent instance)
     delegation_tool = DelegationTool(agent)
     agent.tool_executor.add_tool(delegation_tool)
+
+    # Add retrieve_tool_result tool (always available)
+    retrieve_tool = RetrieveToolResultTool(agent.memory)
+    agent.tool_executor.add_tool(retrieve_tool)
 
     return agent
 
